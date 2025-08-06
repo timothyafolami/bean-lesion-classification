@@ -66,7 +66,7 @@ class ModelManager:
         self.onnx_session = None
         self.onnx_engine = None  # Advanced ONNX engine
         self.model_loaded = False
-        self.use_advanced_onnx = True  # Use advanced ONNX engine by default
+        self.use_advanced_onnx = True  # Always use advanced ONNX engine for better performance
         
         # Thread pool for async inference
         self.executor = ThreadPoolExecutor(max_workers=4)
@@ -108,10 +108,8 @@ class ModelManager:
         
         try:
             if self.model_format == "onnx":
-                if self.use_advanced_onnx:
-                    await self._load_advanced_onnx_model(str(model_path))
-                else:
-                    await self._load_onnx_model(str(model_path))
+                # Always use the advanced ONNX engine for better performance
+                await self._load_advanced_onnx_model(str(model_path))
             elif self.model_format == "pytorch":
                 await self._load_pytorch_model(str(model_path))
             else:
@@ -240,50 +238,48 @@ class ModelManager:
             
             # Run inference based on model format
             if self.model_format == "onnx":
-                if self.use_advanced_onnx and self.onnx_engine:
-                    # Use advanced ONNX engine
-                    engine_result = await self.onnx_engine.predict_single(
-                        input_tensor, 
-                        return_probabilities=return_probabilities,
-                        use_cache=True
-                    )
-                    # Convert engine result to our format
-                    result = {
-                        'class_id': engine_result.class_id,
-                        'class_name': engine_result.class_name,
-                        'confidence': engine_result.confidence,
-                        'processing_time': time.time() - start_time,
-                        'model_format': self.model_format,
-                        'inference_time': engine_result.inference_time,
-                        'session_id': engine_result.session_id,
-                        'provider': engine_result.provider
-                    }
-                    if return_probabilities and engine_result.probabilities:
-                        result['probabilities'] = engine_result.probabilities
-                    
-                    # Add validation info if requested and available
-                    if return_validation_info and validation_info:
-                        result['validation_info'] = validation_info
-                    
-                    return result
-                else:
-                    # Use legacy ONNX session
-                    predictions = await self._predict_onnx(input_tensor)
+                # Always use advanced ONNX engine for better performance
+                engine_result = await self.onnx_engine.predict_single(
+                    input_tensor, 
+                    return_probabilities=return_probabilities,
+                    use_cache=True
+                )
+                # Convert engine result to our format
+                result = {
+                    'class_id': engine_result.class_id,
+                    'class_name': engine_result.class_name,
+                    'confidence': engine_result.confidence,
+                    'processing_time': time.time() - start_time,
+                    'model_format': self.model_format,
+                    'inference_time': engine_result.inference_time,
+                    'session_id': engine_result.session_id,
+                    'provider': engine_result.provider
+                }
+                if return_probabilities and engine_result.probabilities:
+                    result['probabilities'] = engine_result.probabilities
+                
+                # Add validation info if requested and available
+                if return_validation_info and validation_info:
+                    result['validation_info'] = validation_info
+                
+                return result
+                
             elif self.model_format == "pytorch":
+                # Use PyTorch model
                 predictions = await self._predict_pytorch(input_tensor)
+                
+                # Post-process results
+                result = self._postprocess_predictions(predictions, return_probabilities)
+                result['processing_time'] = time.time() - start_time
+                result['model_format'] = self.model_format
+                
+                # Add validation info if requested and available
+                if return_validation_info and validation_info:
+                    result['validation_info'] = validation_info
+                
+                return result
             else:
                 raise ValueError(f"Unsupported model format: {self.model_format}")
-            
-            # Post-process results (for legacy paths)
-            result = self._postprocess_predictions(predictions, return_probabilities)
-            result['processing_time'] = time.time() - start_time
-            result['model_format'] = self.model_format
-            
-            # Add validation info if requested and available
-            if return_validation_info and validation_info:
-                result['validation_info'] = validation_info
-            
-            return result
             
             # Post-process results
             result = self._postprocess_predictions(predictions, return_probabilities)
@@ -354,59 +350,57 @@ class ModelManager:
             
             # Run batch inference
             if self.model_format == "onnx":
-                if self.use_advanced_onnx and self.onnx_engine:
-                    # Use advanced ONNX engine for batch processing
-                    batch_result = await self.onnx_engine.predict_batch(
-                        input_batch,
-                        return_probabilities=return_probabilities
-                    )
+                # Always use advanced ONNX engine for batch processing
+                batch_result = await self.onnx_engine.predict_batch(
+                    input_batch,
+                    return_probabilities=return_probabilities
+                )
+                
+                # Convert engine results to our format
+                results = []
+                for i, engine_result in enumerate(batch_result.results):
+                    result = {
+                        'class_id': engine_result.class_id,
+                        'class_name': engine_result.class_name,
+                        'confidence': engine_result.confidence,
+                        'processing_time': engine_result.inference_time,
+                        'model_format': self.model_format,
+                        'inference_time': engine_result.inference_time,
+                        'session_id': engine_result.session_id,
+                        'provider': engine_result.provider,
+                        'batch_index': engine_result.batch_index
+                    }
+                    if return_probabilities and engine_result.probabilities:
+                        result['probabilities'] = engine_result.probabilities
                     
-                    # Convert engine results to our format
-                    results = []
-                    for i, engine_result in enumerate(batch_result.results):
-                        result = {
-                            'class_id': engine_result.class_id,
-                            'class_name': engine_result.class_name,
-                            'confidence': engine_result.confidence,
-                            'processing_time': engine_result.inference_time,
-                            'model_format': self.model_format,
-                            'inference_time': engine_result.inference_time,
-                            'session_id': engine_result.session_id,
-                            'provider': engine_result.provider,
-                            'batch_index': engine_result.batch_index
-                        }
-                        if return_probabilities and engine_result.probabilities:
-                            result['probabilities'] = engine_result.probabilities
-                        
-                        # Add validation info if available
-                        if return_validation_info and validation_infos and i < len(validation_infos):
-                            result['validation_info'] = validation_infos[i]
-                        
-                        results.append(result)
+                    # Add validation info if available
+                    if return_validation_info and validation_infos and i < len(validation_infos):
+                        result['validation_info'] = validation_infos[i]
                     
-                    return results
-                else:
-                    # Use legacy ONNX session
-                    predictions = await self._predict_onnx_batch(input_batch)
+                    results.append(result)
+                
+                return results
+                
             elif self.model_format == "pytorch":
+                # Use PyTorch model for batch processing
                 predictions = await self._predict_pytorch_batch(input_batch)
+                
+                # Post-process results
+                results = []
+                for i, pred in enumerate(predictions):
+                    result = self._postprocess_predictions(pred[np.newaxis, :], return_probabilities)
+                    result['processing_time'] = (time.time() - start_time) / len(predictions)
+                    result['model_format'] = self.model_format
+                    
+                    # Add validation info if available
+                    if return_validation_info and validation_infos and i < len(validation_infos):
+                        result['validation_info'] = validation_infos[i]
+                    
+                    results.append(result)
+                
+                return results
             else:
                 raise ValueError(f"Unsupported model format: {self.model_format}")
-            
-            # Post-process results (for legacy paths)
-            results = []
-            for i, pred in enumerate(predictions):
-                result = self._postprocess_predictions(pred[np.newaxis, :], return_probabilities)
-                result['processing_time'] = (time.time() - start_time) / len(predictions)
-                result['model_format'] = self.model_format
-                
-                # Add validation info if available
-                if return_validation_info and validation_infos and i < len(validation_infos):
-                    result['validation_info'] = validation_infos[i]
-                
-                results.append(result)
-            
-            return results
             
         except ImageValidationError as e:
             api_logger.error(f"Batch image validation failed: {e}")

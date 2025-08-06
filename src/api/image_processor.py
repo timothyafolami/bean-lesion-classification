@@ -611,6 +611,88 @@ class ImagePreprocessor:
             },
         }
 
+    async def preprocess_batch_images(
+        self,
+        image_files: List[Tuple[bytes, Optional[str], Optional[str]]],
+        return_validation_info: bool = False,
+        fail_on_error: bool = False
+    ) -> Union[List[np.ndarray], Tuple[List[np.ndarray], List[Dict[str, Any]]]]:
+        """
+        Preprocess multiple images for batch inference.
+        
+        Args:
+            image_files: List of (file_data, filename, content_type) tuples
+            return_validation_info: Whether to return validation information
+            fail_on_error: Whether to fail on first error or skip invalid images
+            
+        Returns:
+            List of preprocessed arrays, optionally with validation info
+        """
+        batch_start = time.time()
+        
+        preprocessed_images = []
+        validation_infos = []
+        failed_images = []
+        
+        # Process images sequentially for now (can be made concurrent later)
+        for i, (file_data, filename, content_type) in enumerate(image_files):
+            try:
+                if return_validation_info:
+                    preprocessed_array, validation_info = await self.preprocess_single_image(
+                        file_data, filename, content_type, return_validation_info=True
+                    )
+                    preprocessed_images.append(preprocessed_array)
+                    validation_infos.append(validation_info)
+                else:
+                    preprocessed_array = await self.preprocess_single_image(
+                        file_data, filename, content_type, return_validation_info=False
+                    )
+                    preprocessed_images.append(preprocessed_array)
+                    
+            except Exception as e:
+                error_info = {
+                    'index': i,
+                    'filename': filename,
+                    'error': str(e),
+                    'error_type': type(e).__name__
+                }
+                failed_images.append(error_info)
+                
+                if fail_on_error:
+                    raise ImageValidationError(
+                        f"Batch processing failed at image {i}: {str(e)}"
+                    )
+                else:
+                    api_logger.warning(f"Skipping invalid image {i}: {str(e)}")
+                    continue
+        
+        batch_time = time.time() - batch_start
+        
+        api_logger.info(
+            f"Batch preprocessing completed: {len(preprocessed_images)}/{len(image_files)} "
+            f"images processed successfully in {batch_time:.3f}s"
+        )
+        
+        if failed_images:
+            api_logger.warning(f"Failed to process {len(failed_images)} images: {failed_images}")
+        
+        if return_validation_info:
+            # Add batch summary to validation info
+            batch_summary = {
+                'total_images': len(image_files),
+                'successful_images': len(preprocessed_images),
+                'failed_images': len(failed_images),
+                'batch_processing_time': batch_time,
+                'failed_image_details': failed_images
+            }
+            
+            for validation_info in validation_infos:
+                validation_info['batch_summary'] = batch_summary
+            
+            return preprocessed_images, validation_infos
+        else:
+            return preprocessed_images
+
     async def cleanup(self):
         """
         Clean up resources.
