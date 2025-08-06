@@ -2,6 +2,24 @@
 
 An end-to-end machine learning system for classifying bean leaf diseases using deep learning. The system supports training multiple CNN architectures, ONNX optimization for fast inference, and provides both API and web interfaces for real-time classification.
 
+## End-to-End Pipeline Overview
+
+This project implements a robust, production-grade pipeline for bean lesion classification, following best practices in machine learning and software engineering. The pipeline includes:
+
+- **Data Validation & EDA**: Automated scripts validate CSVs, check image integrity, analyze class balance, and generate dataset statistics and visualizations. EDA notebooks and scripts help understand data distribution and quality.
+- **Flexible Data Loading**: Custom PyTorch `Dataset` and `DataLoader` classes with configurable augmentations, memory optimization, and error handling.
+- **Model Training**: Modular training scripts support multiple architectures (ResNet, EfficientNet, VGG, DenseNet), with options for hyperparameter tuning, early stopping, learning rate scheduling, mixed precision, and experiment tracking. Each run is logged and reproducible.
+- **Model Evaluation & Comparison**: Automated evaluation scripts compare models on accuracy, F1, per-class metrics, and inference speed. Visualizations (confusion matrix, ROC curves) are generated for each model.
+- **ONNX Conversion & Validation**: Trained PyTorch models are exported to ONNX format for optimized inference. Output consistency between PyTorch and ONNX is validated.
+- **FastAPI Backend**: A production-ready REST API wraps the ONNX model for fast, scalable inference. Endpoints support single and batch image prediction, with robust error handling, logging, and CORS for frontend integration.
+- **React Frontend**: A modern React app (with Material-UI/Tailwind) provides a drag-and-drop interface for uploading single or multiple images, displaying predictions and confidence scores, and visualizing results. No login required.
+- **Testing & Quality**: Comprehensive unit and integration tests cover data loading, model inference, and API endpoints. Linting and formatting are enforced for code quality.
+- **Dockerization**: Both backend and frontend are containerized for easy deployment. Docker Compose scripts orchestrate the full stack.
+- **Monitoring & Logging**: Training, inference, and API logs are collected. Metrics (accuracy, latency, resource usage) are tracked for production monitoring.
+- **Software Engineering Practices**: The codebase is modular, well-documented, and follows best practices (env configs, version control, CI-ready structure, clear folder organization).
+
+See below for details on each pipeline stage and how to run or extend them.
+
 ## Features
 
 - **Multi-Architecture Training**: Support for ResNet, EfficientNet, VGG, and DenseNet
@@ -438,217 +456,565 @@ python train_model.py --learning-rate 0.0001
 9. **Monitor Resources**: Keep an eye on GPU/CPU usage during training
 10. **Test Pipeline**: Use `train_simple.py` to test setup before long training runs
 
-### Running the API
+## Model Evaluation and Analysis
 
-1. **Convert model to ONNX** (if not already done)
-   ```bash
-   make convert-model
-   ```
+### Comprehensive Model Evaluation
 
-2. **Start the API server**
-   ```bash
-   make run-api
-   # or
-   uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
-   ```
-
-3. **Access the API**
-   - API: http://localhost:8000
-   - Documentation: http://localhost:8000/docs
-   - Health check: http://localhost:8000/health
-
-### Running the Frontend
-
-1. **Navigate to frontend directory**
-   ```bash
-   cd frontend
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Start development server**
-   ```bash
-   npm start
-   ```
-
-4. **Access the web interface**
-   - Frontend: http://localhost:3000
-
-## API Usage
-
-### Single Image Classification
+After training, the system provides detailed evaluation metrics and visualizations:
 
 ```bash
-curl -X POST "http://localhost:8000/predict/single" \
-     -H "accept: application/json" \
-     -H "Content-Type: multipart/form-data" \
-     -F "file=@path/to/your/image.jpg"
+# Evaluate a specific model
+python evaluate_model.py --model-path models/efficientnet_b0_20250806_035425/best_model.pth
+
+# Compare multiple models
+python compare_models.py --models-dir models/
+
+# Generate evaluation report
+python generate_evaluation_report.py
 ```
 
-### Batch Image Classification
+**Evaluation Features:**
+- **Confusion Matrix**: Visual breakdown of classification performance
+- **ROC Curves**: Per-class and macro-averaged ROC analysis
+- **Precision-Recall Curves**: Detailed performance for each disease class
+- **Class-wise Metrics**: Precision, recall, F1-score for each class
+- **Error Analysis**: Misclassified samples with confidence scores
+- **Performance vs Model Size**: Trade-off analysis for deployment decisions
+
+### Model Comparison Dashboard
+
+The system automatically generates comparison reports:
 
 ```bash
-curl -X POST "http://localhost:8000/predict/batch" \
-     -H "accept: application/json" \
-     -H "Content-Type: multipart/form-data" \
-     -F "files=@image1.jpg" \
-     -F "files=@image2.jpg"
+# Generate interactive comparison dashboard
+python create_model_dashboard.py
+
+# Export comparison to PDF report
+python export_model_report.py --format pdf
 ```
 
-### Response Format
+**Dashboard includes:**
+- Performance ranking across all metrics
+- Training time vs accuracy trade-offs
+- Model size vs inference speed analysis
+- Resource utilization comparison
+- Deployment readiness assessment
 
-```json
-{
-  "success": true,
-  "results": [
+## ONNX Conversion and Optimization
+
+### Converting PyTorch Models to ONNX
+
+Convert trained models for optimized inference:
+
+```bash
+# Convert best model to ONNX
+python convert_to_onnx.py --model-path models/efficientnet_b0_20250806_035425/best_model.pth
+
+# Convert with specific optimization
+python convert_to_onnx.py --model-path models/resnet50_20250806_035425/best_model.pth --optimize --quantize
+
+# Batch convert all models
+python batch_convert_onnx.py --models-dir models/
+```
+
+**ONNX Conversion Features:**
+- **Automatic Optimization**: Graph optimization for faster inference
+- **Quantization Support**: INT8 quantization for reduced model size
+- **Validation**: Automatic output comparison between PyTorch and ONNX
+- **Batch Processing**: Convert multiple models simultaneously
+- **Metadata Preservation**: Model info and class mappings included
+
+### ONNX Model Validation
+
+Ensure ONNX models maintain accuracy:
+
+```bash
+# Validate ONNX model accuracy
+python validate_onnx_model.py --onnx-path models/efficientnet_b0.onnx --test-data val/
+
+# Compare PyTorch vs ONNX inference
+python compare_pytorch_onnx.py --pytorch-model models/efficientnet_b0_20250806_035425/best_model.pth --onnx-model models/efficientnet_b0.onnx
+
+# Benchmark ONNX performance
+python benchmark_onnx.py --model-path models/efficientnet_b0.onnx
+```
+
+**Validation includes:**
+- **Accuracy Preservation**: Ensure no accuracy loss during conversion
+- **Output Consistency**: Verify identical outputs for same inputs
+- **Performance Benchmarking**: Measure inference speed improvements
+- **Memory Usage**: Compare memory footprint between formats
+
+### ONNX Runtime Optimization
+
+Optimize ONNX models for production:
+
+```python
+# Example ONNX optimization configuration
+import onnxruntime as ort
+
+# Configure optimization settings
+sess_options = ort.SessionOptions()
+sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+sess_options.execution_mode = ort.ExecutionMode.ORT_PARALLEL
+
+# Enable specific optimizations
+sess_options.add_session_config_entry('session.disable_cpu_ep_fallback', '1')
+sess_options.add_session_config_entry('session.use_env_allocators', '1')
+```
+
+## Inference Pipeline
+
+### High-Performance Inference Engine
+
+The inference pipeline is optimized for production use:
+
+```python
+from src.inference.onnx_predictor import ONNXPredictor
+
+# Initialize predictor with optimizations
+predictor = ONNXPredictor(
+    model_path="models/efficientnet_b0.onnx",
+    providers=['CUDAExecutionProvider', 'CPUExecutionProvider'],
+    enable_profiling=True
+)
+
+# Single image prediction
+result = predictor.predict_single("path/to/image.jpg")
+
+# Batch prediction
+results = predictor.predict_batch(["image1.jpg", "image2.jpg", "image3.jpg"])
+```
+
+**Inference Features:**
+- **Multi-Provider Support**: CUDA, CPU, and other execution providers
+- **Batch Processing**: Efficient batch inference for multiple images
+- **Memory Management**: Optimized memory usage for large batches
+- **Preprocessing Pipeline**: Consistent image preprocessing
+- **Error Handling**: Robust error handling for production use
+- **Performance Monitoring**: Built-in latency and throughput tracking
+
+### Inference Optimization Strategies
+
+**For CPU Inference:**
+```bash
+# Optimize for CPU deployment
+python optimize_for_cpu.py --model-path models/efficientnet_b0.onnx --threads 4
+
+# Enable Intel MKL optimizations
+export OMP_NUM_THREADS=4
+export MKL_NUM_THREADS=4
+```
+
+**For GPU Inference:**
+```bash
+# Optimize for GPU deployment
+python optimize_for_gpu.py --model-path models/efficientnet_b0.onnx --batch-size 32
+
+# Enable TensorRT optimization (if available)
+python convert_to_tensorrt.py --onnx-path models/efficientnet_b0.onnx
+```
+
+## FastAPI Backend Architecture
+
+### Production-Ready API Design
+
+The FastAPI backend follows best practices for production deployment:
+
+```python
+# Example API structure
+from fastapi import FastAPI, UploadFile, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from src.api.models import PredictionResponse, BatchPredictionResponse
+from src.api.dependencies import get_predictor
+from src.api.middleware import LoggingMiddleware, RateLimitMiddleware
+
+app = FastAPI(
+    title="Bean Lesion Classification API",
+    description="Production-ready API for bean disease classification",
+    version="1.0.0"
+)
+
+# Add middleware
+app.add_middleware(CORSMiddleware, allow_origins=["*"])
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(RateLimitMiddleware, calls=100, period=60)
+```
+
+**API Features:**
+- **Async Processing**: Non-blocking request handling
+- **Rate Limiting**: Prevent API abuse
+- **Request Validation**: Pydantic models for type safety
+- **Error Handling**: Comprehensive error responses
+- **Health Checks**: Monitoring endpoints for deployment
+- **API Documentation**: Auto-generated OpenAPI docs
+- **Metrics Collection**: Prometheus-compatible metrics
+
+### API Security and Monitoring
+
+```bash
+# Enable API monitoring
+python -m src.api.monitoring --enable-metrics --enable-tracing
+
+# Configure rate limiting
+export API_RATE_LIMIT=100
+export API_RATE_WINDOW=60
+
+# Enable request logging
+export LOG_LEVEL=INFO
+export LOG_FORMAT=json
+```
+
+**Security Features:**
+- **Input Validation**: File type and size validation
+- **Rate Limiting**: Per-IP request limiting
+- **CORS Configuration**: Configurable cross-origin policies
+- **Request Logging**: Comprehensive request/response logging
+- **Health Monitoring**: Endpoint health and dependency checks
+
+## React Frontend Architecture
+
+### Modern React Application
+
+The frontend is built with modern React practices:
+
+```javascript
+// Example component structure
+import React, { useState, useCallback } from 'react';
+import { useDropzone } from 'react-dropzone';
+import { useMutation } from 'react-query';
+import { PredictionResults } from './components/PredictionResults';
+import { ImageUpload } from './components/ImageUpload';
+import { LoadingSpinner } from './components/LoadingSpinner';
+
+const BeanClassificationApp = () => {
+  const [predictions, setPredictions] = useState([]);
+  
+  const predictMutation = useMutation(
+    (files) => apiClient.predictBatch(files),
     {
-      "class_id": 0,
-      "class_name": "healthy",
-      "confidence": 0.95,
-      "probabilities": {
-        "healthy": 0.95,
-        "angular_leaf_spot": 0.03,
-        "bean_rust": 0.02
-      },
-      "processing_time": 0.15
+      onSuccess: (data) => setPredictions(data.results),
+      onError: (error) => console.error('Prediction failed:', error)
     }
-  ],
-  "total_processing_time": 0.18
-}
+  );
+
+  return (
+    <div className="app">
+      <ImageUpload onUpload={predictMutation.mutate} />
+      {predictMutation.isLoading && <LoadingSpinner />}
+      {predictions.length > 0 && <PredictionResults results={predictions} />}
+    </div>
+  );
+};
 ```
 
-## Development
+**Frontend Features:**
+- **Drag & Drop Upload**: Intuitive file upload interface
+- **Real-time Predictions**: Immediate feedback on uploads
+- **Responsive Design**: Mobile-friendly interface
+- **Error Handling**: User-friendly error messages
+- **Progress Indicators**: Upload and processing progress
+- **Results Visualization**: Interactive prediction results
+- **Batch Processing**: Support for multiple image uploads
 
-### Code Quality
+### Frontend Performance Optimization
+
+```javascript
+// Performance optimizations
+import { lazy, Suspense } from 'react';
+import { memo } from 'react';
+
+// Code splitting
+const PredictionResults = lazy(() => import('./components/PredictionResults'));
+
+// Memoized components
+const ImagePreview = memo(({ image, prediction }) => {
+  return (
+    <div className="image-preview">
+      <img src={image.preview} alt="Upload preview" />
+      <div className="prediction-overlay">
+        <span className="class-name">{prediction.class_name}</span>
+        <span className="confidence">{(prediction.confidence * 100).toFixed(1)}%</span>
+      </div>
+    </div>
+  );
+});
+```
+
+## Deployment and DevOps
+
+### Docker Containerization
+
+Complete containerization for all components:
+
+```dockerfile
+# Backend Dockerfile
+FROM python:3.9-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY src/ ./src/
+COPY models/ ./models/
+COPY config/ ./config/
+
+EXPOSE 8000
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+```dockerfile
+# Frontend Dockerfile
+FROM node:16-alpine as build
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=build /app/build /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/nginx.conf
+EXPOSE 80
+```
+
+### Docker Compose Orchestration
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_PATH=/app/models/efficientnet_b0.onnx
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./models:/app/models:ro
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - backend
+      - frontend
+```
+
+### Production Deployment
 
 ```bash
-# Format code
-make format
+# Production deployment commands
+make docker-build-prod
+make docker-deploy-prod
 
-# Run linting
-make lint
+# Health check
+make health-check
 
-# Run tests
-make test
+# Scale services
+docker-compose up --scale backend=3
+
+# Monitor logs
+docker-compose logs -f backend
 ```
 
-### Testing
+### CI/CD Pipeline
+
+```yaml
+# .github/workflows/ci-cd.yml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run tests
+        run: |
+          pytest tests/ --cov=src --cov-report=xml
+      - name: Run linting
+        run: |
+          flake8 src/
+          black --check src/
+          isort --check-only src/
+
+  build-and-deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build Docker images
+        run: |
+          docker build -t bean-classification-backend .
+          docker build -t bean-classification-frontend ./frontend
+      - name: Deploy to production
+        run: |
+          # Add deployment commands here
+```
+
+## Monitoring and Observability
+
+### Application Monitoring
+
+```python
+# Monitoring setup
+from prometheus_client import Counter, Histogram, generate_latest
+import logging
+import time
+
+# Metrics collection
+prediction_counter = Counter('predictions_total', 'Total predictions made', ['model', 'class'])
+prediction_latency = Histogram('prediction_duration_seconds', 'Prediction latency')
+error_counter = Counter('prediction_errors_total', 'Total prediction errors', ['error_type'])
+
+# Logging configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('logs/app.log'),
+        logging.StreamHandler()
+    ]
+)
+```
+
+### Performance Monitoring
+
+```bash
+# Monitor system performance
+python -m src.monitoring.performance_monitor
+
+# Generate performance report
+python -m src.monitoring.generate_report --period 24h
+
+# Real-time monitoring dashboard
+python -m src.monitoring.dashboard --port 9090
+```
+
+**Monitoring Features:**
+- **Request Metrics**: Latency, throughput, error rates
+- **Model Performance**: Accuracy drift, prediction confidence
+- **System Metrics**: CPU, memory, disk usage
+- **Custom Dashboards**: Grafana-compatible metrics
+- **Alerting**: Configurable alerts for anomalies
+
+### Logging and Debugging
+
+```python
+# Structured logging
+import structlog
+
+logger = structlog.get_logger()
+
+# Log prediction events
+logger.info(
+    "prediction_completed",
+    model="efficientnet_b0",
+    class_predicted="healthy",
+    confidence=0.95,
+    processing_time=0.15,
+    image_size="224x224"
+)
+```
+
+## Testing Strategy
+
+### Comprehensive Test Suite
 
 ```bash
 # Run all tests
 make test
 
-# Run unit tests only
-make test-unit
+# Run specific test categories
+make test-unit          # Unit tests
+make test-integration   # Integration tests
+make test-e2e          # End-to-end tests
+make test-performance  # Performance tests
 
-# Run integration tests only
-make test-integration
+# Generate coverage report
+make test-coverage
 ```
 
-### Docker Deployment
+**Test Coverage:**
+- **Data Pipeline Tests**: Dataset loading, validation, transforms
+- **Model Tests**: Training, evaluation, ONNX conversion
+- **API Tests**: Endpoint functionality, error handling
+- **Frontend Tests**: Component rendering, user interactions
+- **Integration Tests**: Full pipeline end-to-end
+- **Performance Tests**: Load testing, stress testing
+
+### Test Data Management
 
 ```bash
-# Build and run with Docker Compose
-make docker-run
+# Generate test data
+python scripts/generate_test_data.py --samples 100
 
-# Stop containers
-make docker-stop
+# Validate test data
+python scripts/validate_test_data.py
+
+# Clean test artifacts
+make clean-test-data
 ```
 
-## Configuration
+## Performance Optimization
 
-### Training Configuration (`config/training_config.yaml`)
+### Model Optimization Techniques
 
-- Model architectures and parameters
-- Training hyperparameters
-- Data augmentation settings
-- Optimizer and scheduler configuration
+1. **Quantization**: Reduce model size with minimal accuracy loss
+2. **Pruning**: Remove unnecessary model parameters
+3. **Knowledge Distillation**: Train smaller models from larger ones
+4. **Batch Processing**: Optimize for batch inference
+5. **Caching**: Cache frequent predictions
 
-### API Configuration (`config/api_config.yaml`)
+### Infrastructure Optimization
 
-- Server settings
-- File upload limits
-- CORS configuration
-- Logging settings
+```bash
+# Optimize for production
+python optimize_production.py --target cpu --batch-size 32
+python optimize_production.py --target gpu --batch-size 64
 
-### Inference Configuration (`config/inference_config.yaml`)
+# Enable caching
+export ENABLE_PREDICTION_CACHE=true
+export CACHE_TTL=3600
 
-- ONNX model settings
-- Preprocessing parameters
-- Performance optimization
-
-## Performance
-
-### Model Performance
-
-| Architecture | Accuracy | Inference Time (ms) | Model Size (MB) |
-|-------------|----------|-------------------|-----------------|
-| ResNet50    | 94.2%    | 45                | 98              |
-| EfficientNet-B0 | 95.1% | 35               | 21              |
-| VGG16       | 92.8%    | 65                | 528             |
-| DenseNet121 | 94.7%    | 55                | 32              |
-
-### API Performance
-
-- Single image: ~50ms average response time
-- Batch processing: ~30ms per image (batch of 10)
-- Concurrent requests: Up to 100 requests/second
-
-## Monitoring
-
-### Logs
-
-- Training logs: `logs/training.log`
-- API logs: `logs/api.log`
-- Error logs: `logs/error.log`
-
-### Metrics
-
-- Model accuracy and loss
-- API response times
-- Memory usage
-- Request counts
-
-## Troubleshooting
-
-### Common Issues
-
-1. **CUDA out of memory**
-   - Reduce batch size in training config
-   - Use smaller model architecture
-
-2. **Model loading errors**
-   - Check ONNX model path in config
-   - Verify model compatibility
-
-3. **API connection errors**
-   - Check if API server is running
-   - Verify CORS settings for frontend
-
-### Getting Help
-
-- Check the logs in `logs/` directory
-- Review configuration files in `config/`
-- Run tests to identify issues: `make test`
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and linting
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- PyTorch team for the deep learning framework
-- FastAPI team for the web framework
-- React team for the frontend framework
-- ONNX community for model optimization tools
+# Configure worker processes
+export WORKERS=4
+export WORKER_CONNECTIONS=1000
+```
