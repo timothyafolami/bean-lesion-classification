@@ -1,102 +1,114 @@
-# Bean Lesion Classification - Development Makefile
+# Bean Classification Docker Management
 
-.PHONY: help install install-dev setup clean test lint format run-api run-train docker-build docker-run
+.PHONY: help build up down logs clean test
 
-# Default target
-help:
-	@echo "Available commands:"
-	@echo "  install      - Install production dependencies"
-	@echo "  install-dev  - Install development dependencies"
-	@echo "  setup        - Initial project setup"
-	@echo "  clean        - Clean up generated files"
-	@echo "  test         - Run tests"
-	@echo "  lint         - Run linting"
-	@echo "  format       - Format code"
-	@echo "  run-api      - Run FastAPI server"
-	@echo "  run-train    - Run training pipeline"
-	@echo "  docker-build - Build Docker images"
-	@echo "  docker-run   - Run with Docker Compose"
+# Default environment
+ENV ?= development
 
-# Installation
-install:
-	pip install -r requirements.txt
+help: ## Show this help message
+	@echo "Bean Classification Docker Commands:"
+	@echo ""
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-install-dev:
-	pip install -r requirements.txt
-	pip install -e ".[dev]"
+build: ## Build all Docker images
+	@echo "Building Docker images..."
+	docker-compose build --no-cache
 
-# Setup
-setup: install-dev
-	@echo "Setting up project..."
-	@mkdir -p models logs data/processed data/raw experiments
-	@cp .env.example .env
-	@echo "Project setup complete!"
-	@echo "Please edit .env file with your configuration"
+build-backend: ## Build only backend image
+	@echo "Building backend image..."
+	docker-compose build --no-cache backend
 
-# Cleaning
-clean:
-	find . -type f -name "*.pyc" -delete
-	find . -type d -name "__pycache__" -delete
-	find . -type d -name "*.egg-info" -exec rm -rf {} +
-	find . -type f -name ".coverage" -delete
-	find . -type d -name ".pytest_cache" -exec rm -rf {} +
-	find . -type d -name ".mypy_cache" -exec rm -rf {} +
+build-frontend: ## Build only frontend image
+	@echo "Building frontend image..."
+	docker-compose build --no-cache frontend
 
-# Testing
-test:
-	pytest tests/ -v --cov=src --cov-report=html --cov-report=term
+up: ## Start all services in development mode
+	@echo "Starting services in $(ENV) mode..."
+	@if [ "$(ENV)" = "production" ]; then \
+		docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d; \
+	else \
+		docker-compose up -d; \
+	fi
 
-test-unit:
-	pytest tests/unit/ -v
+up-dev: ## Start services in development mode with logs
+	@echo "Starting services in development mode..."
+	docker-compose up
 
-test-integration:
-	pytest tests/integration/ -v
+up-prod: ## Start services in production mode
+	@echo "Starting services in production mode..."
+	docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
-# Code quality
-lint:
-	flake8 src/ tests/
-	mypy src/
+up-monitoring: ## Start services with monitoring stack
+	@echo "Starting services with monitoring..."
+	docker-compose --profile monitoring up -d
 
-format:
-	black src/ tests/
-	isort src/ tests/
-
-format-check:
-	black --check src/ tests/
-	isort --check-only src/ tests/
-
-# Running
-run-api:
-	uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
-
-run-train:
-	python -m src.training.train
-
-# Docker
-docker-build:
-	docker build -t bean-classification-api -f docker/Dockerfile.api .
-	docker build -t bean-classification-frontend -f docker/Dockerfile.frontend ./frontend
-
-docker-run:
-	docker-compose up --build
-
-docker-stop:
+down: ## Stop all services
+	@echo "Stopping all services..."
 	docker-compose down
 
-# Development helpers
-jupyter:
-	jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+down-volumes: ## Stop all services and remove volumes
+	@echo "Stopping services and removing volumes..."
+	docker-compose down -v
 
-# Model operations
-convert-model:
-	python -m src.inference.convert --model-path models/best_model.pth --output-path models/best_model.onnx
+logs: ## Show logs for all services
+	docker-compose logs -f
 
-benchmark:
-	python -m src.inference.benchmark --model-path models/best_model.onnx
+logs-backend: ## Show backend logs
+	docker-compose logs -f backend
 
-# Data operations
-prepare-data:
-	python -m src.training.data_preparation
+logs-frontend: ## Show frontend logs
+	docker-compose logs -f frontend
 
-validate-data:
-	python -m src.training.data_validation
+status: ## Show service status
+	docker-compose ps
+
+restart: ## Restart all services
+	@echo "Restarting services..."
+	docker-compose restart
+
+restart-backend: ## Restart backend service
+	docker-compose restart backend
+
+restart-frontend: ## Restart frontend service
+	docker-compose restart frontend
+
+shell-backend: ## Open shell in backend container
+	docker-compose exec backend /bin/bash
+
+shell-frontend: ## Open shell in frontend container
+	docker-compose exec frontend /bin/sh
+
+test: ## Run tests in containers
+	@echo "Running tests..."
+	docker-compose exec backend python -m pytest tests/ -v
+	docker-compose exec frontend npm test
+
+clean: ## Clean up Docker resources
+	@echo "Cleaning up Docker resources..."
+	docker-compose down -v --remove-orphans
+	docker system prune -f
+	docker volume prune -f
+
+clean-all: ## Clean up all Docker resources including images
+	@echo "Cleaning up all Docker resources..."
+	docker-compose down -v --remove-orphans
+	docker system prune -af
+	docker volume prune -f
+
+health: ## Check service health
+	@echo "Checking service health..."
+	@curl -f http://localhost:8000/health && echo "Backend: OK" || echo "Backend: FAIL"
+	@curl -f http://localhost/health && echo "Frontend: OK" || echo "Frontend: FAIL"
+
+deploy: ## Deploy to production
+	@echo "Deploying to production..."
+	@make build ENV=production
+	@make up-prod
+
+backup-models: ## Backup model files
+	@echo "Backing up models..."
+	docker run --rm -v $(PWD)/models:/source -v $(PWD)/backups:/backup alpine tar czf /backup/models-$(shell date +%Y%m%d-%H%M%S).tar.gz -C /source .
+
+restore-models: ## Restore model files (specify BACKUP_FILE)
+	@echo "Restoring models from $(BACKUP_FILE)..."
+	docker run --rm -v $(PWD)/models:/target -v $(PWD)/backups:/backup alpine tar xzf /backup/$(BACKUP_FILE) -C /target

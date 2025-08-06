@@ -23,6 +23,13 @@ from src.api.models import ModelManager
 from src.api.routes import prediction_router, health_router
 from src.utils.logging_config import setup_logging, api_logger
 from src.utils.config import load_api_config, get_settings
+from src.monitoring.middleware import (
+    MetricsMiddleware, LoggingMiddleware, 
+    ErrorTrackingMiddleware, PerformanceMonitoringMiddleware
+)
+from src.monitoring.endpoints import router as monitoring_router
+from src.monitoring.metrics import metrics_collector
+from src.monitoring.logging_config import setup_logging as setup_monitoring_logging
 
 
 # Global model manager instance
@@ -38,6 +45,9 @@ async def lifespan(app: FastAPI):
     
     # Startup
     api_logger.info("🚀 Starting Bean Lesion Classification API...")
+    
+    # Update application status
+    metrics_collector.update_app_status('starting')
     
     try:
         # Load configuration
@@ -55,11 +65,24 @@ async def lifespan(app: FastAPI):
         # Load the model
         await model_manager.load_model()
         
+        # Update model info in metrics
+        model_info = {
+            'format': model_manager.model_format,
+            'path': str(model_manager.model_path),
+            'architecture': getattr(settings, 'architecture', 'unknown'),
+            'version': '1.0.0'
+        }
+        metrics_collector.update_model_info(model_info)
+        
+        # Update application status to ready
+        metrics_collector.update_app_status('ready')
+        
         api_logger.info("✅ Model loaded successfully")
         api_logger.info(f"Model format: {model_manager.model_format}")
         api_logger.info(f"Model path: {model_manager.model_path}")
         
     except Exception as e:
+        metrics_collector.update_app_status('error')
         api_logger.error(f"❌ Failed to initialize model: {e}")
         raise
     
@@ -102,6 +125,7 @@ def create_app() -> FastAPI:
     # Add routes
     app.include_router(health_router, prefix="/health", tags=["Health"])
     app.include_router(prediction_router, prefix="/predict", tags=["Prediction"])
+    app.include_router(monitoring_router, tags=["Monitoring"])
     
     # Add global exception handler
     setup_exception_handlers(app)
@@ -126,6 +150,12 @@ def setup_middleware(app: FastAPI, config: Optional[Dict[str, Any]]):
     """
     Set up middleware for the FastAPI application.
     """
+    # Monitoring middleware (add first for accurate metrics)
+    app.add_middleware(MetricsMiddleware)
+    app.add_middleware(LoggingMiddleware, log_level="INFO")
+    app.add_middleware(ErrorTrackingMiddleware)
+    app.add_middleware(PerformanceMonitoringMiddleware, slow_request_threshold=5.0)
+    
     # CORS middleware
     if config and 'cors' in config:
         cors_config = config['cors']
@@ -210,11 +240,18 @@ def main():
     """
     Main function to run the API server.
     """
-    # Setup logging
-    setup_logging(log_level="INFO")
-    
     # Get settings
     settings = get_settings()
+    
+    # Setup monitoring logging
+    setup_monitoring_logging(
+        log_level=os.getenv('LOG_LEVEL', 'INFO'),
+        log_format=os.getenv('LOG_FORMAT', 'text'),
+        log_file=os.getenv('LOG_FILE', './logs/app.log')
+    )
+    
+    # Setup legacy logging for compatibility
+    setup_logging(log_level="INFO")
     
     # Run the server
     uvicorn.run(

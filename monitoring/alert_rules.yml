@@ -1,0 +1,136 @@
+# Prometheus alert rules for Bean Classification API
+
+groups:
+  - name: bean_classification_alerts
+    rules:
+      # High error rate
+      - alert: HighErrorRate
+        expr: rate(api_requests_total{status_code=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} errors per second for endpoint {{ $labels.endpoint }}"
+
+      # High response time
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(api_request_duration_seconds_bucket[5m])) > 5
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is {{ $value }}s for endpoint {{ $labels.endpoint }}"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: memory_usage_bytes{component="api"} / (1024*1024*1024) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "API memory usage is {{ $value }}GB"
+
+      # Model inference failures
+      - alert: InferenceFailures
+        expr: rate(errors_total{component="inference"}[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High inference failure rate"
+          description: "Inference failure rate is {{ $value }} failures per second"
+
+      # No active sessions (model not loaded)
+      - alert: NoActiveSessions
+        expr: active_inference_sessions == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No active inference sessions"
+          description: "Model appears to be not loaded or all sessions are down"
+
+      # High batch processing time
+      - alert: SlowBatchProcessing
+        expr: histogram_quantile(0.90, rate(inference_duration_seconds_bucket{prediction_type="batch"}[5m])) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow batch processing"
+          description: "90th percentile batch processing time is {{ $value }}s"
+
+      # Low confidence predictions
+      - alert: LowConfidencePredictions
+        expr: histogram_quantile(0.50, rate(inference_confidence_score_bucket[10m])) < 0.7
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low confidence predictions"
+          description: "Median confidence score is {{ $value }}, indicating potential model issues"
+
+      # High preprocessing failures
+      - alert: PreprocessingFailures
+        expr: rate(images_processed_total{status="failed"}[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High image preprocessing failure rate"
+          description: "Image preprocessing failure rate is {{ $value }} failures per second"
+
+      # API service down
+      - alert: APIServiceDown
+        expr: up{job="bean-classification-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Bean Classification API is down"
+          description: "The Bean Classification API service is not responding"
+
+      # High request rate (potential DDoS)
+      - alert: HighRequestRate
+        expr: rate(api_requests_total[1m]) > 100
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unusually high request rate"
+          description: "Request rate is {{ $value }} requests per second, potential DDoS attack"
+
+  - name: system_alerts
+    rules:
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }}"
+
+      # High disk usage
+      - alert: HighDiskUsage
+        expr: (node_filesystem_size_bytes - node_filesystem_free_bytes) / node_filesystem_size_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk usage"
+          description: "Disk usage is {{ $value }}% on {{ $labels.instance }}"
+
+      # Low disk space
+      - alert: LowDiskSpace
+        expr: node_filesystem_free_bytes / (1024*1024*1024) < 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low disk space"
+          description: "Only {{ $value }}GB disk space remaining on {{ $labels.instance }}"

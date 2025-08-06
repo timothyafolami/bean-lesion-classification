@@ -25,6 +25,7 @@ from collections import OrderedDict
 
 from src.utils.logging_config import api_logger
 from src.utils.helpers import get_device
+from src.monitoring.metrics import metrics_collector
 
 
 class InferenceProvider(str, Enum):
@@ -140,6 +141,9 @@ class SessionPool:
             with self._lock:
                 if self._available_sessions:
                     session = self._available_sessions.pop()
+                    # Update active sessions metric
+                    active_count = self.max_sessions - len(self._available_sessions)
+                    metrics_collector.update_active_sessions(active_count)
                     api_logger.debug(f"Acquired session {session._session_id}")
                     return session
 
@@ -158,6 +162,9 @@ class SessionPool:
         with self._lock:
             if session not in self._available_sessions:
                 self._available_sessions.append(session)
+                # Update active sessions metric
+                active_count = self.max_sessions - len(self._available_sessions)
+                metrics_collector.update_active_sessions(active_count)
                 api_logger.debug(f"Released session {session._session_id}")
 
     def get_session_info(self) -> Dict[str, Any]:

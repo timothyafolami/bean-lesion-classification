@@ -24,6 +24,7 @@ from src.utils.logging_config import api_logger
 from src.utils.helpers import get_device
 from src.api.image_processor import ImagePreprocessor, ImageValidationError
 from src.inference.onnx_engine import ONNXInferenceEngine, create_optimized_engine
+from src.monitoring.metrics import metrics_collector, track_inference_metrics
 
 
 class ModelManager:
@@ -290,12 +291,26 @@ class ModelManager:
             if return_validation_info and validation_info:
                 result['validation_info'] = validation_info
             
+            # Record inference metrics
+            duration = time.time() - start_time
+            model_format = 'onnx_engine' if self.use_advanced_onnx and self.onnx_engine else self.model_format
+            metrics_collector.record_inference(
+                model_format=model_format,
+                prediction_type='single',
+                duration=duration,
+                confidence=result.get('confidence'),
+                predicted_class=result.get('class_name')
+            )
+            
             return result
             
         except ImageValidationError as e:
+            metrics_collector.record_error('ImageValidationError', 'preprocessing')
+            metrics_collector.record_image_processing('failed')
             api_logger.error(f"Image validation failed: {e}")
             raise RuntimeError(f"Image validation failed: {str(e)}")
         except Exception as e:
+            metrics_collector.record_error(type(e).__name__, 'inference')
             api_logger.error(f"Prediction failed: {e}")
             raise RuntimeError(f"Prediction failed: {str(e)}")
     
@@ -398,14 +413,27 @@ class ModelManager:
                     
                     results.append(result)
                 
+                # Record batch metrics
+                duration = time.time() - start_time
+                model_format = 'onnx_engine' if self.use_advanced_onnx and self.onnx_engine else self.model_format
+                metrics_collector.record_inference(
+                    model_format=model_format,
+                    prediction_type='batch',
+                    duration=duration
+                )
+                metrics_collector.record_image_processing('success', batch_size=len(images))
+                
                 return results
             else:
                 raise ValueError(f"Unsupported model format: {self.model_format}")
             
         except ImageValidationError as e:
+            metrics_collector.record_error('ImageValidationError', 'preprocessing')
+            metrics_collector.record_image_processing('failed', batch_size=len(images))
             api_logger.error(f"Batch image validation failed: {e}")
             raise RuntimeError(f"Batch validation failed: {str(e)}")
         except Exception as e:
+            metrics_collector.record_error(type(e).__name__, 'inference')
             api_logger.error(f"Batch prediction failed: {e}")
             raise RuntimeError(f"Batch prediction failed: {str(e)}")
     
