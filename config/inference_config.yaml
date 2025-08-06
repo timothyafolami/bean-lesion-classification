@@ -1,0 +1,19 @@
+# Inference Configuration
+model:
+  onnx_path: "models/best_model.onnx"
+  providers: ["CPUExecutionProvider"]  # or ["CUDAExecutionProvider", "CPUExecutionProvider"]
+  
+preprocessing:
+  image_size: [224, 224]
+  normalize_mean: [0.485, 0.456, 0.406]
+  normalize_std: [0.229, 0.224, 0.225]
+  
+postprocessing:
+  class_names: ["healthy", "angular_leaf_spot", "bean_rust"]
+  confidence_threshold: 0.1
+  
+performance:
+  batch_size: 16
+  enable_caching: true
+  cache_size: 100
+  session_pool_size: 4
