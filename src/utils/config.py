@@ -66,6 +66,19 @@ class Settings(BaseSettings):
     architecture: str = Field(default="efficientnet_b0", env="ARCHITECTURE")
     device: str = Field(default="auto", env="DEVICE")  # auto, cpu, cuda, mps
     
+    # Security Configuration
+    cors_origins: str = Field(default="http://localhost:3000", env="CORS_ORIGINS")
+    api_key_header: str = Field(default="X-API-Key", env="API_KEY_HEADER")
+    rate_limit_per_minute: int = Field(default=60, env="RATE_LIMIT_PER_MINUTE")
+    
+    # Monitoring Configuration
+    metrics_enabled: bool = Field(default=True, env="METRICS_ENABLED")
+    metrics_port: int = Field(default=8001, env="METRICS_PORT")
+    prometheus_enabled: bool = Field(default=False, env="PROMETHEUS_ENABLED")
+    
+    # Grafana Configuration
+    grafana_password: str = Field(default="admin123", env="GRAFANA_PASSWORD")
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
