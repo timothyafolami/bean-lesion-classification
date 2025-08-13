@@ -227,14 +227,28 @@ class MetricsCollector:
     
     def record_image_processing(self, status: str, image_size: int = None, 
                                batch_size: int = None):
-        """Record image processing metrics"""
-        images_processed_total.labels(status=status).inc()
-        
-        if image_size:
+        """Record image processing metrics.
+        Increments the processed counter by batch_size (defaults to 1).
+        Also records optional image_size and batch_size observations.
+        """
+        increment = 1 if not batch_size or batch_size < 1 else batch_size
+        images_processed_total.labels(status=status).inc(increment)
+
+        if image_size is not None:
             image_size_bytes.observe(image_size)
-        
-        if batch_size:
+
+        if batch_size is not None and batch_size > 0:
             batch_size_images.observe(batch_size)
+
+    def observe_image_size(self, image_size: int):
+        """Observe an image size without incrementing counters."""
+        if image_size is not None:
+            image_size_bytes.observe(image_size)
+
+    def observe_batch_size(self, size: int):
+        """Observe a batch size without affecting counters."""
+        if size is not None and size > 0:
+            batch_size_images.observe(size)
     
     def record_error(self, error_type: str, component: str):
         """Record error metrics"""

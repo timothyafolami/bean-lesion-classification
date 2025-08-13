@@ -14,7 +14,7 @@ model:
 upload:
   max_file_size: 10485760  # 10MB in bytes
   allowed_extensions: [".jpg", ".jpeg", ".png", ".webp"]
-  max_batch_size: 10
+  max_batch_size: 50
 
 cors:
   allow_origins: ["http://localhost:3000", "http://127.0.0.1:3000"]

@@ -196,7 +196,7 @@ export const ClassificationPage: React.FC = () => {
       {/* Upload Area */}
       <ImageUploader
         onFilesSelected={handleFilesSelected}
-        maxFiles={10}
+        maxFiles={50}
         disabled={isUploading || isOffline}
       />
 

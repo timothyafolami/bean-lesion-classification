@@ -35,6 +35,9 @@ from src.monitoring.logging_config import setup_logging as setup_monitoring_logg
 # Global model manager instance
 model_manager: Optional[ModelManager] = None
 
+# Global app instance to prevent duplicate creation
+_app_instance: Optional[FastAPI] = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -98,6 +101,12 @@ def create_app() -> FastAPI:
     """
     Create and configure the FastAPI application.
     """
+    global _app_instance
+    
+    # Return existing instance if already created
+    if _app_instance is not None:
+        return _app_instance
+    
     # Load configuration
     try:
         config = load_api_config()
@@ -125,7 +134,8 @@ def create_app() -> FastAPI:
     # Add routes
     app.include_router(health_router, prefix="/health", tags=["Health"])
     app.include_router(prediction_router, prefix="/predict", tags=["Prediction"])
-    app.include_router(monitoring_router, tags=["Monitoring"])
+    # Monitoring router already sets its own tag; avoid duplicating with different casing
+    app.include_router(monitoring_router)
     
     # Add global exception handler
     setup_exception_handlers(app)
@@ -143,6 +153,8 @@ def create_app() -> FastAPI:
             "health": "/health"
         }
     
+    # Store the instance
+    _app_instance = app
     return app
 
 

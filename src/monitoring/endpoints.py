@@ -14,7 +14,8 @@ from .logging_config import get_logger
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/monitoring", tags=["monitoring"])
+# Use a single, consistent tag to avoid duplicate sections in API docs
+router = APIRouter(prefix="/monitoring", tags=["Monitoring"])
 
 
 @router.get("/metrics")

@@ -25,6 +25,7 @@ from src.api.schemas import (
     ErrorResponse,
 )
 from src.api.models import ModelManager
+from src.utils.config import load_api_config
 from src.utils.logging_config import api_logger
 
 
@@ -48,6 +49,14 @@ health_router = APIRouter()
 
 # Prediction router
 prediction_router = APIRouter()
+
+# Load configurable limits (fallback to env/defaults)
+try:
+    _api_config = load_api_config()
+    DEFAULT_MAX_BATCH_SIZE = int(_api_config.get("upload", {}).get("max_batch_size", 10))
+except Exception:
+    import os
+    DEFAULT_MAX_BATCH_SIZE = int(os.getenv("BATCH_MAX_SIZE", "10"))
 
 
 @health_router.get("/", response_model=HealthResponse)
@@ -130,9 +139,7 @@ async def predict_single(
             image_data = await file.read()
         except Exception as e:
             api_logger.error(f"Failed to read file: {e}")
-            raise HTTPException(
-                status_code=400, detail="Failed to read uploaded file"
-            )
+            raise HTTPException(status_code=400, detail="Failed to read uploaded file")
 
         # Make prediction with enhanced preprocessing
         try:
@@ -141,7 +148,7 @@ async def predict_single(
                 filename=file.filename,
                 content_type=file.content_type,
                 return_probabilities=return_probabilities,
-                return_validation_info=True
+                return_validation_info=True,
             )
 
             api_logger.info(
@@ -189,8 +196,8 @@ async def predict_batch(
     start_time = time.time()
 
     try:
-        # Validate batch size
-        max_batch_size = 10  # Configurable limit
+        # Validate batch size (configurable)
+        max_batch_size = DEFAULT_MAX_BATCH_SIZE
         if len(files) > max_batch_size:
             raise HTTPException(
                 status_code=400,
@@ -213,11 +220,13 @@ async def predict_batch(
 
             try:
                 image_data = await file.read()
-                image_data_list.append((
-                    image_data,
-                    file.filename or f"image_{len(image_data_list)}",
-                    file.content_type
-                ))
+                image_data_list.append(
+                    (
+                        image_data,
+                        file.filename or f"image_{len(image_data_list)}",
+                        file.content_type,
+                    )
+                )
             except Exception as e:
                 api_logger.error(f"Failed to read file {file.filename}: {e}")
                 raise HTTPException(
@@ -230,7 +239,7 @@ async def predict_batch(
                 images=image_data_list,
                 return_probabilities=return_probabilities,
                 return_validation_info=True,
-                fail_on_error=False  # Skip invalid images instead of failing
+                fail_on_error=False,  # Skip invalid images instead of failing
             )
 
             api_logger.info(
@@ -286,16 +295,15 @@ async def get_classes():
 
 
 @prediction_router.get("/preprocessing-info")
-async def get_preprocessing_info(model_manager: ModelManager = Depends(get_model_manager)):
+async def get_preprocessing_info(
+    model_manager: ModelManager = Depends(get_model_manager),
+):
     """
     Get information about image preprocessing capabilities and requirements.
     """
     try:
         preprocessing_info = model_manager.get_preprocessing_info()
-        return {
-            "success": True,
-            "preprocessing_info": preprocessing_info
-        }
+        return {"success": True, "preprocessing_info": preprocessing_info}
     except Exception as e:
         api_logger.error(f"Failed to get preprocessing info: {e}")
         raise HTTPException(
@@ -304,26 +312,30 @@ async def get_preprocessing_info(model_manager: ModelManager = Depends(get_model
 
 
 @prediction_router.get("/performance-stats")
-async def get_performance_stats(model_manager: ModelManager = Depends(get_model_manager)):
+async def get_performance_stats(
+    model_manager: ModelManager = Depends(get_model_manager),
+):
     """
     Get detailed performance statistics from the ONNX inference engine.
     """
     try:
-        if (model_manager.model_format == "onnx" and 
-            model_manager.use_advanced_onnx and 
-            model_manager.onnx_engine):
-            
+        if (
+            model_manager.model_format == "onnx"
+            and model_manager.use_advanced_onnx
+            and model_manager.onnx_engine
+        ):
+
             performance_stats = model_manager.onnx_engine.get_performance_stats()
             return {
                 "success": True,
                 "performance_stats": performance_stats,
-                "engine_type": "advanced_onnx"
+                "engine_type": "advanced_onnx",
             }
         else:
             return {
                 "success": True,
                 "message": "Performance stats only available for advanced ONNX engine",
-                "engine_type": model_manager.model_format
+                "engine_type": model_manager.model_format,
             }
     except Exception as e:
         api_logger.error(f"Failed to get performance stats: {e}")
@@ -338,29 +350,24 @@ async def run_benchmark(model_manager: ModelManager = Depends(get_model_manager)
     Run a performance benchmark on the inference engine.
     """
     try:
-        if (model_manager.model_format == "onnx" and 
-            model_manager.use_advanced_onnx and 
-            model_manager.onnx_engine):
-            
+        if (
+            model_manager.model_format == "onnx"
+            and model_manager.use_advanced_onnx
+            and model_manager.onnx_engine
+        ):
+
             api_logger.info("Starting inference benchmark...")
-            
+
             benchmark_results = await model_manager.onnx_engine.benchmark(
-                num_runs=20,
-                batch_sizes=[1, 4, 8],
-                return_detailed_stats=False
+                num_runs=20, batch_sizes=[1, 4, 8], return_detailed_stats=False
             )
-            
-            return {
-                "success": True,
-                "benchmark_results": benchmark_results
-            }
+
+            return {"success": True, "benchmark_results": benchmark_results}
         else:
             raise HTTPException(
-                status_code=400, 
-                detail="Benchmarking only available for advanced ONNX engine"
+                status_code=400,
+                detail="Benchmarking only available for advanced ONNX engine",
             )
     except Exception as e:
         api_logger.error(f"Benchmark failed: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Benchmark failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Benchmark failed: {str(e)}")

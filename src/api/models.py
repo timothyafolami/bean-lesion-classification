@@ -421,6 +421,7 @@ class ModelManager:
                     prediction_type='batch',
                     duration=duration
                 )
+                # Count each image in the batch as processed
                 metrics_collector.record_image_processing('success', batch_size=len(images))
                 
                 return results

@@ -24,7 +24,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Skip metrics collection for metrics endpoint itself
-        if request.url.path == "/metrics":
+        if request.url.path in ("/monitoring/metrics", "/metrics"):
             return await call_next(request)
         
         start_time = time.time()
